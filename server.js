@@ -1,8 +1,13 @@
 const express = require('express');
 const {animals} = require('./data/animals');
+const fs = require('fs');
+const path = require('path');
 const PORT = process.env.PORT || 3001;
 const app = express();
-
+//parse incoming string or array data
+app.use(express.urlencoded({ extended: true}));
+//parse incoming JSON data
+app.use(express.json());
 
 function filterByQuery(query, animalsArray) {
     let personalityTraitsArray =[];
@@ -41,6 +46,7 @@ function filterByQuery(query, animalsArray) {
     }
     return filteredResults;
 };
+
 function findById(id, animalsArray) {
     const result = animalsArray.filter(animal => animal.id === id)[0];
     if (result) {
@@ -50,6 +56,39 @@ function findById(id, animalsArray) {
         res.send(404);
     }
 }
+
+// will take animal given in body and add it to the animalsArray
+function createNewAnimal(body, animalsArray) {
+    const animal = body;
+    animalsArray.push(animal);
+    //synchronous version, does not require a callback function
+    fs.writeFileSync(
+        //joins the value of dirname which represents the directory of the file we execute the code in, and path to the animals.json file
+        path.join(__dirname, './data/animals.json'),
+        //saves the js array data as JSON. the null arg means we dont want to edit any of our existing data, 2 indicates we want to create white space between our values to make it more readable.
+        JSON.stringify({ animals: animalsArray }, null, 2)
+    );
+    
+    return animal;
+};
+
+function validateAnimal(animal) {
+    if(!animal.name || typeof animal.name !== 'string') {
+        return false;
+    }
+    if (!animal.species || typeof animal.species !== 'string') {
+        return false;
+    }
+    if (!animal.diet || typeof animal.diet !== 'string') {
+        return false;
+    }
+    if (!animal.personalityTraits || !Array.isArray(animal.personalityTraits)) {
+        return false;
+    }
+    return true;
+}
+
+// get and post requests
 app.get('/api/animals', (req,res) =>{
     let results = animals;
     if (req.query) {
@@ -60,7 +99,22 @@ app.get('/api/animals', (req,res) =>{
 app.get('/api/animals/:id', (req, res) => {
     const result = findById(req.params.id, animals);
     res.json(result);
-})
+});
+app.post('/api/animals', (req, res) => {
+    //set id based on what the next index of the array will be
+    req.body.id = animals.length.toString();
+
+    //validate data in req.body
+    if (!validateAnimal(req.body)) {
+        // 400 is s user error not server
+        res.status(400).send('The animal is not properly formatted.');
+    } else {
+    // add animal to json file and animals array in this function
+    const animal = createNewAnimal(req.body, animals);
+    res.json(animal);
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`API server now on port ${PORT}!`);
 });
